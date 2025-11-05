@@ -1,16 +1,17 @@
 import { useState } from "react";
 import type { Transaction } from "./types";
 
-type Props = {
-  onAdd: (tx: Omit<Transaction, "id">) => Promise<void> | void;
-};
-
 type FormState = {
   date: string;
   type: "EXPENSE" | "INCOME";
   category: string;
   memo: string;
-  amount: string; // 입력은 문자열로 관리
+  amount: string;
+};
+
+// ✅ add를 props로 받는다 (훅 호출 금지)
+type Props = {
+  onAdd: (tx: Omit<Transaction, "id">) => Promise<void> | void;
 };
 
 export default function TransactionForm({ onAdd }: Props) {
@@ -30,17 +31,16 @@ export default function TransactionForm({ onAdd }: Props) {
     await onAdd({
       date: form.date,
       type: form.type,
-      category: form.category || undefined,
-      memo: form.memo || undefined,
+      category: form.category.trim() || undefined,
+      memo: form.memo.trim() || undefined,
       amount: amt,
     });
 
-    // 입력 초기화
     setForm((f) => ({ ...f, category: "", memo: "", amount: "" }));
   }
 
   return (
-    <form onSubmit={onSubmit}>
+    <form onSubmit={onSubmit} style={{ display: "flex", gap: 8 }}>
       <input
         type="date"
         value={form.date}

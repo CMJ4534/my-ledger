@@ -1,29 +1,28 @@
-import { useMemo } from "react";
-import { PieChart, Pie, Cell, Legend, Tooltip } from "recharts";
+import { useMemo, useState } from "react";
 import { useTransactions } from "../features/transactions/useTransactions";
-import CategoryDonut from "../components/CategoryDonut";
-// ⚠️ SafePie, MonthPicker는 사용하지 않음 (import 하지 말 것)
+import MonthPicker from "../components/MonthPicker";
+import { PieChart, Pie, Cell, Legend, Tooltip } from "recharts";
 
 export default function Dashboard() {
   const { data = [] } = useTransactions();
+  const today = new Date();
+  const ym0 = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}`;
+  const [month, setMonth] = useState(ym0);
 
-  // 월 필터 없이 전체 데이터 사용
-  const monthData = data ?? [];
+  // 해당 월 데이터
+  const monthData = useMemo(
+    () => data.filter((t) => (t?.date ?? "").startsWith(month)),
+    [data, month]
+  );
 
-  const income = useMemo(
-    () => monthData.filter((t) => t.type === "INCOME").reduce((s, t) => s + t.amount, 0),
-    [monthData]
-  );
-  const expense = useMemo(
-    () => monthData.filter((t) => t.type === "EXPENSE").reduce((s, t) => s + t.amount, 0),
-    [monthData]
-  );
+  const income = monthData.filter(t => t.type === "INCOME").reduce((s, t) => s + t.amount, 0);
+  const expense = monthData.filter(t => t.type === "EXPENSE").reduce((s, t) => s + t.amount, 0);
   const total = income - expense;
 
-  // 수입/지출 비율 차트 데이터
-  const chartData = [
-    { name: "수입", value: Number(income || 0) },
-    { name: "지출", value: Number(expense || 0) },
+  // 수입/지출 비율 차트
+  const ratioData = [
+    { name: "수입", value: income },
+    { name: "지출", value: expense },
   ];
 
   // 카테고리별 지출 합계 (지출만)
@@ -31,7 +30,7 @@ export default function Dashboard() {
     const map = new Map<string, number>();
     for (const t of monthData) {
       if (t.type !== "EXPENSE") continue;
-      const key = (t.category ?? "").trim() || "기타";
+      const key = (t.category ?? "기타").trim() || "기타";
       map.set(key, (map.get(key) ?? 0) + t.amount);
     }
     return Array.from(map, ([name, value]) => ({ name, value }))
@@ -39,26 +38,26 @@ export default function Dashboard() {
   }, [monthData]);
 
   return (
-    <div>
-      <h2>가계부</h2>
+    <div style={{ display: "grid", gap: 16 }}>
+      <h2>대시보드</h2>
 
-      <div style={{ opacity: 0.8, margin: "8px 0 16px" }}>
-        총합: <strong>{total.toLocaleString()} 원</strong>{" "}
-        (수입 {income.toLocaleString()} • 지출 {expense.toLocaleString()})
+      <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+        <MonthPicker value={month} onChange={setMonth} />
+        <div>
+          총합: <strong>{total.toLocaleString()} 원</strong>{" "}
+          (수입 {income.toLocaleString()} • 지출 {expense.toLocaleString()})
+        </div>
       </div>
 
-      {/* 수입/지출 비율 그래프 (Recharts 직접 사용) */}
-      <PieChart width={320} height={320}>
+      {/* 수입/지출 비율 */}
+      <PieChart width={340} height={320}>
         <Pie
-          data={chartData}
+          data={ratioData}
           dataKey="value"
           nameKey="name"
           outerRadius={110}
-          label={({ name, percent = 0 }: { name?: string; percent?: number }) =>
-            `${name ?? ""}: ${(percent * 100).toFixed(1)}%`
-          }
+          label={({ name, percent = 0 }) => `${name}: ${(percent * 100).toFixed(1)}%`}
         >
-          {/* 수입 / 지출 색상 */}
           <Cell fill="#4CAF50" />
           <Cell fill="#F44336" />
         </Pie>
@@ -66,18 +65,18 @@ export default function Dashboard() {
         <Legend />
       </PieChart>
 
-      {/* 카테고리 도넛 */}
-      <h3 style={{ marginTop: 24 }}>카테고리별 지출</h3>
-      <CategoryDonut data={categoryData} />
-
-      {/* Top 5 표 (선택) */}
-      <ul>
-        {categoryData.slice(0, 5).map((c) => (
-          <li key={c.name}>
-            {c.name} · {c.value.toLocaleString()}원
-          </li>
-        ))}
-      </ul>
+      {/* 카테고리 Top5 */}
+      <div>
+        <h3>카테고리별 지출 Top 5</h3>
+        <ul>
+          {categoryData.slice(0, 5).map((c) => (
+            <li key={c.name}>
+              {c.name} · {c.value.toLocaleString()}원
+            </li>
+          ))}
+          {categoryData.length === 0 && <li>지출 데이터 없음</li>}
+        </ul>
+      </div>
     </div>
   );
 }
