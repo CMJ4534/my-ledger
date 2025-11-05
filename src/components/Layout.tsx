@@ -5,8 +5,8 @@ export default function Layout() {
     <div>
       <header style={{ padding: 16, borderBottom: "1px solid #eee" }}>
         <nav style={{ display: "flex", gap: 12 }}>
-          <Link to="/">Dashboard</Link>
-          <Link to="/transactions">Transactions</Link>
+          <Link to="/">통계</Link>
+          <Link to="/transactions">가계부</Link>
         </nav>
       </header>
       <main style={{ padding: 16 }}>

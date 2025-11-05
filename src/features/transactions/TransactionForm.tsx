@@ -1,16 +1,19 @@
 import { useState } from "react";
-import { useAddTransaction } from "./useTransactions";
+import type { Transaction } from "./types";
+
+type Props = {
+  onAdd: (tx: Omit<Transaction, "id">) => Promise<void> | void;
+};
 
 type FormState = {
   date: string;
   type: "EXPENSE" | "INCOME";
   category: string;
   memo: string;
-  amount: string;
+  amount: string; // 입력은 문자열로 관리
 };
 
-export default function TransactionForm() {
-  const m = useAddTransaction(); // ← mutation 훅 (성공 시 목록 invalidate)
+export default function TransactionForm({ onAdd }: Props) {
   const [form, setForm] = useState<FormState>({
     date: new Date().toISOString().slice(0, 10),
     type: "EXPENSE",
@@ -19,33 +22,25 @@ export default function TransactionForm() {
     amount: "",
   });
 
-async function onSubmit(e: React.FormEvent) {
-  e.preventDefault();
+  async function onSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    const amt = Number((form.amount ?? "").trim());
+    if (!Number.isFinite(amt)) return;
 
-  const amtStr = form.amount.trim();
-  // 공란만 막고, 숫자인지만 체크 (0도 허용하려면 그대로 두세요)
-  if (amtStr === "" || Number.isNaN(Number(amtStr))) return;
-
-  m.mutate(
-    {
+    await onAdd({
       date: form.date,
       type: form.type,
-      category: form.category,
+      category: form.category || undefined,
       memo: form.memo || undefined,
-      amount: Number(amtStr),
-    },
-    {
-      onSuccess: () => {
-        // 입력창만 리셋
-        setForm((f) => ({ ...f, category: "", memo: "", amount: "" }));
-      },
-    }
-  );
-}
+      amount: amt,
+    });
 
+    // 입력 초기화
+    setForm((f) => ({ ...f, category: "", memo: "", amount: "" }));
+  }
 
   return (
-    <form onSubmit={onSubmit} style={{ display: "grid", gap: 8, maxWidth: 420 }}>
+    <form onSubmit={onSubmit}>
       <input
         type="date"
         value={form.date}
@@ -72,12 +67,10 @@ async function onSubmit(e: React.FormEvent) {
       />
       <input
         placeholder="금액"
-        type="number"
-        min={0}
         value={form.amount}
         onChange={(e) => setForm((f) => ({ ...f, amount: e.target.value }))}
       />
-      <button disabled={m.isPending}>추가</button>
+      <button type="submit">추가</button>
     </form>
   );
 }

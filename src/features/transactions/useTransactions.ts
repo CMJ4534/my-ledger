@@ -1,20 +1,29 @@
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { listTransactions, addTransaction } from "./api";
-export * from "./types";
+import { useEffect, useState } from "react";
+import { listTransactions, addTransaction, removeTransaction } from "./api";
+import type { Transaction } from "./types";
 
 export function useTransactions() {
-  return useQuery({
-    queryKey: ["transactions"],
-    queryFn: listTransactions,
-  });
-}
+  const [data, setData] = useState<Transaction[]>([]);
+  const [isLoading, setLoading] = useState(true);
 
-export function useAddTransaction() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: addTransaction,
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["transactions"] }),
-    // 혹시 모를 캐시 꼬임까지 막으려면:
-    onSettled: () => qc.invalidateQueries({ queryKey: ["transactions"] }),
-  });
+  useEffect(() => {
+    (async () => {
+      setLoading(true);
+      setData(await listTransactions());
+      setLoading(false);
+    })();
+  }, []);
+
+  async function add(tx: Omit<Transaction, "id">) {
+    const created = await addTransaction(tx);
+    // ✅ 같은 훅 인스턴스를 쓰는 컴포넌트들은 즉시 업데이트됨
+    setData((cur) => [created, ...cur]);
+  }
+
+  async function remove(id: string) {
+    await removeTransaction(id);
+    setData((cur) => cur.filter((t) => t.id !== id));
+  }
+
+  return { data, isLoading, add, remove };
 }
