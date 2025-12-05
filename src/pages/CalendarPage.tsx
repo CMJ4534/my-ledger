@@ -3,6 +3,7 @@ import { useMemo, useState, FormEvent } from "react";
 import { useTransactions } from "../features/transactions/useTransactions";
 import MonthPicker from "../components/MonthPicker";
 import { useBudget } from "../features/budget/useBudget";
+import { BudgetUsageSummary } from "../components/BudgetUsageSummary";
 
 type Tx = {
   id: string;
@@ -25,8 +26,8 @@ type FormState = {
 
 type PanelMode = "add" | "search" | null;
 
-// 지출/수입 카테고리 트리
-const CATEGORY_TREE = {
+// ===== 지출/수입 카테고리 트리 =====
+const CATEGORY_TREE: Record<"EXPENSE" | "INCOME", Record<string, string[]>> = {
   EXPENSE: {
     식비: ["식사", "간식", "카페/음료"],
     교통: ["대중교통", "택시", "주유"],
@@ -40,7 +41,10 @@ const CATEGORY_TREE = {
     환급: ["세금환급", "캐시백"],
     기타: ["기타"],
   },
-} as const;
+};
+
+// 대분류 직접 입력용 특수 값
+const CUSTOM_MAJOR = "__custom__";
 
 export default function CalendarPage() {
   const { data = [], add, remove, isLoading } = useTransactions();
@@ -77,22 +81,23 @@ export default function CalendarPage() {
     amount: "",
   });
 
-  // 타입별 카테고리 옵션
+  // ===== 타입별 카테고리 옵션 =====
   const majorOptions = Object.keys(CATEGORY_TREE[form.type]);
-  const subOptions =
-    form.majorCategory && CATEGORY_TREE[form.type][form.majorCategory as keyof typeof CATEGORY_TREE["EXPENSE"]]
-      ? CATEGORY_TREE[form.type][
-          form.majorCategory as keyof typeof CATEGORY_TREE["EXPENSE"]
-        ]
+
+  const subOptions: string[] =
+    form.majorCategory &&
+    form.majorCategory !== CUSTOM_MAJOR &&
+    CATEGORY_TREE[form.type][form.majorCategory]
+      ? CATEGORY_TREE[form.type][form.majorCategory]
       : [];
 
-  // 선택 월 거래
+  // ===== 선택 월 거래 =====
   const monthTx: Tx[] = useMemo(
     () => data.filter((t: any) => (t?.date ?? "").startsWith(month)) as Tx[],
     [data, month]
   );
 
-  // 캘린더 셀 계산
+  // ===== 캘린더 셀 계산 =====
   const [year, m] = month.split("-").map(Number);
   const firstDate = new Date(year, m - 1, 1);
   const firstDayOfWeek = firstDate.getDay(); // 0 = 일
@@ -102,7 +107,7 @@ export default function CalendarPage() {
   for (let i = 0; i < firstDayOfWeek; i++) cells.push(null);
   for (let d = 1; d <= daysInMonth; d++) cells.push(d);
 
-  // 날짜별 수입/지출 합계
+  // ===== 날짜별 수입/지출 합계 =====
   const byDate = useMemo(() => {
     const map = new Map<
       string,
@@ -120,6 +125,15 @@ export default function CalendarPage() {
     }
     return map;
   }, [monthTx]);
+
+  // 월 수입 합계
+  const totalIncome = useMemo(
+    () =>
+      monthTx
+        .filter((t) => t.type === "INCOME")
+        .reduce((s, t) => s + t.amount, 0),
+    [monthTx]
+  );
 
   // 월 지출 합계 (예산용)
   const totalExpense = useMemo(
@@ -150,7 +164,7 @@ export default function CalendarPage() {
       ? Math.floor(remainingBudget / remainingDays)
       : 0;
 
-  // 선택 날짜 + 필터 적용 리스트
+  // ===== 선택 날짜 + 필터 적용 리스트 =====
   const selectedList: Tx[] = useMemo(() => {
     if (!selectedDate) return [];
 
@@ -171,7 +185,7 @@ export default function CalendarPage() {
     return [...list].sort((a, b) => (a.date < b.date ? 1 : -1));
   }, [monthTx, selectedDate, typeFilter, query]);
 
-  // 추가 폼 submit
+  // ===== 추가 폼 submit =====
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
     const amt = Number((form.amount ?? "").trim());
@@ -182,8 +196,17 @@ export default function CalendarPage() {
     const major = form.majorCategory;
     const sub = form.subCategory;
     const custom = form.customCategory.trim();
-    const categoryStr =
-      custom || [major, sub].filter(Boolean).join(" > ") || undefined;
+
+    let categoryStr: string | undefined;
+
+    if (major === CUSTOM_MAJOR) {
+      // 대분류를 직접 입력한 경우: custom만 사용
+      categoryStr = custom || undefined;
+    } else {
+      // 기존 방식: "대분류 > 소분류" 또는 전체 직접입력
+      categoryStr =
+        custom || [major, sub].filter(Boolean).join(" > ") || undefined;
+    }
 
     await add({
       date: dateToUse,
@@ -208,15 +231,7 @@ export default function CalendarPage() {
   }
 
   return (
-    <div
-      style={{
-        padding: 24,
-        maxWidth: 1100,
-        margin: "0 auto",
-        display: "grid",
-        gap: 24,
-      }}
-    >
+    <div className="page-container">
       <h2>캘린더</h2>
 
       {/* 상단: 월 선택 + 버튼들 */}
@@ -233,9 +248,7 @@ export default function CalendarPage() {
         <div style={{ display: "flex", gap: 8 }}>
           <button
             type="button"
-            onClick={() =>
-              setPanel((p) => (p === "add" ? null : "add"))
-            }
+            onClick={() => setPanel((p) => (p === "add" ? null : "add"))}
             style={{
               width: 32,
               height: 32,
@@ -278,18 +291,27 @@ export default function CalendarPage() {
       {/* 예산 요약 표시 */}
       {budget > 0 && (
         <div style={{ fontSize: 13, color: "#555" }}>
-          이번 달 예산{" "}
-          <b>{budget.toLocaleString()}원</b> 중{" "}
+          이번 달 예산 <b>{budget.toLocaleString()}원</b> 중{" "}
           <b>{totalExpense.toLocaleString()}원</b> 지출, 남은{" "}
           <b>{(remainingBudget ?? 0).toLocaleString()}원</b>
-          {remainingDays > 0 && remainingBudget !== null && remainingBudget > 0 && (
-            <>
-              {" "}
-              (하루 약{" "}
-              <b>{recommendedPerDay.toLocaleString()}원</b> 사용 가능)
-            </>
-          )}
+          {remainingDays > 0 &&
+            remainingBudget !== null &&
+            remainingBudget > 0 && (
+              <>
+                {" "}
+                (하루 약 <b>{recommendedPerDay.toLocaleString()}원</b> 사용 가능)
+              </>
+            )}
         </div>
+      )}
+
+      {/* 예산 사용률 바 (설정 예산 vs 실제 수입 기준) */}
+      {(budget > 0 || totalIncome > 0) && (
+        <BudgetUsageSummary
+          income={totalIncome}
+          expense={totalExpense}
+          budget={budget}
+        />
       )}
 
       {/* 캘린더 */}
@@ -450,6 +472,7 @@ export default function CalendarPage() {
               <option value="INCOME">수입</option>
             </select>
 
+            {/* 대분류 선택 or 직접 입력 */}
             <select
               style={{ minWidth: 120 }}
               value={form.majorCategory}
@@ -467,8 +490,10 @@ export default function CalendarPage() {
                   {label}
                 </option>
               ))}
+              <option value={CUSTOM_MAJOR}>대분류 직접 입력</option>
             </select>
 
+            {/* 소분류: 직접입력 모드일 땐 비활성화 */}
             <select
               style={{ minWidth: 120 }}
               value={form.subCategory}
@@ -478,7 +503,9 @@ export default function CalendarPage() {
                   subCategory: e.target.value,
                 }))
               }
-              disabled={!form.majorCategory}
+              disabled={
+                !form.majorCategory || form.majorCategory === CUSTOM_MAJOR
+              }
             >
               <option value="">소분류 선택</option>
               {subOptions.map((label) => (
@@ -488,9 +515,14 @@ export default function CalendarPage() {
               ))}
             </select>
 
+            {/* 직접 입력 필드 */}
             <input
               style={{ flex: 1, minWidth: 140 }}
-              placeholder="직접 입력(선택사항)"
+              placeholder={
+                form.majorCategory === CUSTOM_MAJOR
+                  ? "대분류 이름 직접 입력"
+                  : "카테고리 전체 직접 입력(선택사항)"
+              }
               value={form.customCategory}
               onChange={(e) =>
                 setForm((f) => ({ ...f, customCategory: e.target.value }))
@@ -596,5 +628,3 @@ export default function CalendarPage() {
     </div>
   );
 }
-
-

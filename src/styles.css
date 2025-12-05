@@ -1,0 +1,78 @@
+:root {
+  --bg-color: #f7f8fa;
+  --card-color: #ffffff;
+  --border-color: #e6e8ef;
+  --text-primary: #2f3542;
+  --text-secondary: #8c98a6;
+  --accent: #6C5CE7;
+  --radius: 12px;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg-color);
+  font-family: 'Inter', 'Noto Sans KR', sans-serif;
+  color: var(--text-primary);
+}
+
+.card {
+  background: var(--card-color);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius);
+  padding: 24px;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.04);
+  margin-bottom: 20px;
+}
+
+button {
+  border-radius: 10px;
+  padding: 8px 14px;
+  border: 1px solid var(--border-color);
+  background: white;
+  cursor: pointer;
+  transition: 0.2s;
+}
+
+button:hover {
+  background: var(--accent);
+  color: white;
+}
+
+
+
+/* 상단 통계 / 캘린더 탭 컨테이너 */
+.page-tabs {
+  display: inline-flex;
+  gap: 8px;
+  padding: 8px 16px;
+  margin: 8px 0 4px 16px; /* 위치 약간 아래/오른쪽으로 */
+}
+
+/* 탭 기본 모양 (버튼 느낌) */
+.page-tab {
+  padding: 4px 14px;
+  border-radius: 999px;
+  font-size: 14px;
+  text-decoration: none;
+
+  background: transparent;
+  color: #4a4a6a;
+  border: 1px solid transparent;
+
+  transition: all 0.15s ease;
+}
+
+/* hover 시 */
+.page-tab:hover {
+  background: #f0f2fb;
+  color: #262b3a;
+}
+
+/* 활성 탭 (현재 페이지) */
+.page-tab-active {
+  background: #4a6cf7;
+  color: #ffffff;
+  border-color: #4a6cf7;
+  box-shadow: 0 2px 6px rgba(74, 108, 247, 0.35);
+}

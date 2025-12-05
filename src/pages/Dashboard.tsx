@@ -12,6 +12,7 @@ import {
   Legend,
   ResponsiveContainer,
 } from "recharts";
+import { TopNav } from "../components/TopNav";
 
 type Tx = {
   id: string;
@@ -22,8 +23,11 @@ type Tx = {
   amount: number;
 };
 
-// ---------- ★ 대분류/소분류 매핑 함수 추가 ★ ----------
-const majorCategoryMap: Record<string, string> = {
+// ======================================================
+// 카테고리 매핑: 원시 입력 → 대분류/소분류 체계화
+// ======================================================
+
+const CATEGORY_MAJOR_MAP: Record<string, string> = {
   // 식비 계열
   "아침": "식비",
   "점심": "식비",
@@ -32,42 +36,69 @@ const majorCategoryMap: Record<string, string> = {
   "야식": "식비",
   "음료": "식비",
   "외식": "식비",
+  "카페": "식비",
 
-  // 교통 계열
+  // 교통 계열 👉 전부 "교통"으로 통일
+  "교통": "교통",           // 그대로 써도 "교통" 대분류
+  "교통비": "교통",         // 원시값이 교통비여도 대분류는 "교통"
   "버스": "교통",
   "지하철": "교통",
   "택시": "교통",
+  "기후동행카드": "교통",   // 여기도 교통으로 바꿔줘야 함
 
-  // 생활 계열
-  "마트": "생활",
-  "편의점": "생활",
-  "생활용품": "생활",
+  // 건강 계열
+  "병원": "건강",
+  "약국": "건강",
+  "운동": "건강",
 
-  // 이런 느낌으로 계속 추가하면 됨
+  // 주거/통신 계열
+  "월세": "주거/통신",
+  "관리비": "주거/통신",
+  "통신비": "주거/통신",
+
+  // 학자금 계열
+  "학자금": "학자금 대출",
+  "등록금": "학자금 대출",
+
+  // 생활용품
+  "생필품": "생활용품",
+  "생활용품": "생활용품",
 };
 
-function getMajorAndSub(rawCategory: string | undefined) {
+// 대분류 목록 (셀렉트 박스에서 쓸 옵션)
+const MAJOR_CATEGORIES = [
+  "식비",
+  "교통",
+  "건강",
+  "주거/통신",
+  "학자금 대출",
+  "생활용품",
+  "기타",
+];
+
+// 원시 카테고리를 (대분류, 소분류)로 변환하는 함수
+function getMajorAndSub(rawCategory?: string) {
   const raw = (rawCategory ?? "기타").trim();
 
-  // 이미 "식비 > 외식" 이런 형식이면 그대로 사용
+  // "식비 > 외식" 같이 이미 대분류 > 소분류로 들어온 건 그대로 사용
   if (raw.includes(">")) {
-    const [majorRaw, subRaw] = raw.split(">");
-    const major = (majorRaw ?? "").trim() || "기타";
-    const sub = (subRaw ?? "").trim() || "기타";
-    return { major, sub };
+    const [m, s] = raw.split(">");
+    return {
+      major: (m ?? "").trim() || "기타",
+      sub: (s ?? "").trim() || "기타",
+    };
   }
 
-  // 단일 카테고리인 경우: 매핑 테이블 먼저 확인
-  const mappedMajor = majorCategoryMap[raw];
+  // 1) 우리가 정의한 매핑이 있으면 그걸 대분류로 사용
+  const mappedMajor = CATEGORY_MAJOR_MAP[raw];
   if (mappedMajor) {
-    // 예) "저녁" -> major: "식비", sub: "저녁"
-    return { major: mappedMajor, sub: raw };
+    return { major: mappedMajor, sub: raw }; // 예: "버스" → major: "교통", sub: "버스"
   }
 
-  // 매핑에도 없으면 자기 자신을 대분류로 취급
-  return { major: raw || "기타", sub: "기타" };
+  // 2) 그 외의 것은 전부 "기타" 대분류로 묶기
+  //    예: "유튜브" → major: "기타", sub: "유튜브"
+  return { major: "기타", sub: raw || "기타" };
 }
-// -----------------------------------------------------
 
 export default function DashboardPage() {
   const { data = [], isLoading } = useTransactions();
@@ -151,6 +182,15 @@ export default function DashboardPage() {
       remainingDays = 0;
     }
   }
+
+// ====== 예산 / 실제 자금 사용률 ======
+const budgetUsageRatio =
+  budget > 0 ? Math.min(expense / budget, 1) : null; // 설정 예산 기준
+
+const realTotalMoney = income - expense; // 내가 현재 가지고 있는 돈(잔액)
+const incomeUsageRatio =
+  income > 0 ? Math.min(expense / income, 1) : null; // 실제 수입 기준 사용률
+
 
   const recommendedPerDay =
     remainingBudget !== null && remainingBudget > 0 && remainingDays > 0
@@ -259,6 +299,34 @@ export default function DashboardPage() {
     return alerts;
   }, [categoryRows, categoryBudgets, majorCategoryUsage, remainingDays]);
 
+    // ====== 전체 예산 경고 (80% 이상 / 100% 초과) ======
+  const overallBudgetAlert = useMemo(() => {
+    if (budget <= 0) return null;
+    if (expense <= 0) return null;
+
+    const ratio = expense / budget; // 0.0 ~
+    if (ratio < 0.8) return null;   // 80% 미만이면 경고 안 띄움
+
+    const percentText = (ratio * 100).toFixed(1);
+
+    if (ratio >= 1) {
+      // 예산 100% 초과
+      return {
+        level: "danger" as const,
+        title: "이번 달 전체 예산을 이미 모두 사용했어요.",
+        detail: `설정한 예산 ${budget.toLocaleString()}원 중 ${expense.toLocaleString()}원을 사용했습니다.`,
+      };
+    }
+
+    // 80% 이상 ~ 100% 미만
+    return {
+      level: "warn" as const,
+      title: `이번 달 전체 예산의 ${percentText}%를 사용했어요.`,
+      detail: `설정한 예산 ${budget.toLocaleString()}원 중 ${expense.toLocaleString()}원을 사용했습니다.`,
+    };
+  }, [budget, expense]);
+
+
   // ====== 가장 많이 쓴 날 ======
   const biggestSpendingDay = useMemo(() => {
     const m = new Map<string, number>();
@@ -311,16 +379,9 @@ export default function DashboardPage() {
     return <p style={{ padding: 24 }}>불러오는 중...</p>;
   }
 
-  return (
-    <div
-      style={{
-        padding: 24,
-        maxWidth: 1100,
-        margin: "0 auto",
-        display: "grid",
-        gap: 24,
-      }}
-    >
+return (
+  <div className="page-container">
+
       <h2>대시보드</h2>
 
       {/* 상단: 월 선택 + 총합 + 오늘까지 권장 지출 안내 */}
@@ -479,36 +540,57 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* 🔔 카테고리별 예산 경고 카드 */}
-      {categoryAlerts.length > 0 && (
+
+      {/* 🔔 전체 예산 + 카테고리별 예산 경고 카드 */}
+      {(overallBudgetAlert || categoryAlerts.length > 0) && (
         <div
           style={{
             padding: 12,
             borderRadius: 12,
-            border: "1px solid #ffe082",
-            background: "#fff8e1",
+            border:
+              overallBudgetAlert?.level === "danger"
+                ? "1px solid #ef5350"
+                : "1px solid #ffe082",
+            background:
+              overallBudgetAlert?.level === "danger"
+                ? "#ffebee"
+                : "#fff8e1",
             fontSize: 13,
           }}
         >
           <b>예산 경고</b>
-          <ul style={{ margin: "4px 0 0", paddingLeft: 18 }}>
-            {categoryAlerts.slice(0, 3).map((a) => (
-              <li key={a.name}>
-                이번 달 <b>[{a.name}]</b> 예산의{" "}
-                <b>{(a.ratio * 100).toFixed(1)}%</b>를 사용했습니다. (예산{" "}
-                {a.budget.toLocaleString()}원 중{" "}
-                {a.spent.toLocaleString()}원 사용)
-                {a.remainingDays > 0 && a.recommendedPerDay > 0 && (
-                  <>
-                    {" "}
-                    남은 {a.remainingDays}일 동안 하루 약{" "}
-                    <b>{a.recommendedPerDay.toLocaleString()}원</b>만 써야
-                    합니다.
-                  </>
-                )}
-              </li>
-            ))}
-          </ul>
+
+          {/* 전체 예산 경고 메시지 */}
+          {overallBudgetAlert && (
+            <div style={{ marginTop: 4, marginBottom: 6, lineHeight: 1.6 }}>
+              <div>{overallBudgetAlert.title}</div>
+              <div style={{ color: "#555" }}>{overallBudgetAlert.detail}</div>
+            </div>
+          )}
+
+          {/* 카테고리별 예산 경고 리스트 */}
+          {categoryAlerts.length > 0 && (
+            <ul style={{ margin: 0, paddingLeft: 18 }}>
+              {categoryAlerts.slice(0, 3).map((a) => (
+                <li key={a.name}>
+                  ⛔ <b>{a.name}</b> 예산의{" "}
+                  <b>{(a.ratio * 100).toFixed(1)}%</b>를 이미 사용했어요.
+                  {" "}
+                  (예산 {a.budget.toLocaleString()}원 중{" "}
+                  {a.spent.toLocaleString()}원 사용)
+                  {a.remainingDays > 0 && a.recommendedPerDay > 0 && (
+                    <>
+                      {" "}
+                      남은 {a.remainingDays}일 동안 하루{" "}
+                      <b>{a.recommendedPerDay.toLocaleString()}원</b> 이하로 쓰면
+                      예산 안에서 유지돼요.
+                    </>
+                  )}
+                </li>
+
+              ))}
+            </ul>
+          )}
         </div>
       )}
 
@@ -540,12 +622,20 @@ export default function DashboardPage() {
             alignItems: "center",
           }}
         >
-          <input
-            placeholder="카테고리 이름 (예: 식비)"
+          {/* 🔽 대분류 선택 셀렉트 박스 */}
+          <select
             value={newCategoryName}
             onChange={(e) => setNewCategoryName(e.target.value)}
-            style={{ minWidth: 120, padding: "4px 6px" }}
-          />
+            style={{ minWidth: 140, padding: "4px 6px" }}
+          >
+            <option value="">카테고리 선택</option>
+            {MAJOR_CATEGORIES.map((cat) => (
+              <option key={cat} value={cat}>
+                {cat}
+              </option>
+            ))}
+          </select>
+
           <input
             placeholder="예산 금액 (예: 300000)"
             value={newCategoryBudget}
@@ -846,6 +936,87 @@ export default function DashboardPage() {
   );
 }
 
+function UsageBar(props: {
+  label: string;
+  used: number;
+  total: number;
+  ratio: number | null;
+  color?: string;
+}) {
+  const { label, used, total, ratio, color = "#ef5350" } = props;
+  if (!ratio || total <= 0) return null;
+
+  const percent = (ratio * 100).toFixed(1);
+
+  const usedRatio = Math.min(ratio ?? 0, 1);
+  const remainingRatio = 1 - usedRatio;
+
+  const usedPercent = (usedRatio * 100).toFixed(1);
+  const remainingPercent = (remainingRatio * 100).toFixed(1);
+
+  return (
+    <div
+      style={{
+        display: "grid",
+        gridTemplateColumns: "minmax(0, 3fr) minmax(0, 2fr)",
+        gap: 16,
+        alignItems: "center",
+        marginTop: 8,
+      }}
+    >
+      {/* 막대 */}
+      <div
+        style={{
+          border: "2px solid #000",
+          borderRadius: 4,
+          height: 30,
+          overflow: "hidden",
+          background: "#fff",
+        }}
+      >
+        <div
+          style={{
+            display: "flex",
+            width: "100%",
+            height: "100%",
+          }}
+        >
+          {/* 사용한 부분 */}
+          <div
+            style={{
+              width: `${usedPercent}%`,
+              background: color, // 예: 빨강/주황
+              transition: "width 0.3s ease",
+            }}
+          />
+          {/* 남은 부분 */}
+          <div
+            style={{
+              width: `${remainingPercent}%`,
+              background: "#f5f5f5", // 연한 회색으로 남은 구간 표시
+              transition: "width 0.3s ease",
+            }}
+          />
+        </div>
+      </div>
+
+      {/* 텍스트 */}
+      <div style={{ fontSize: 13, color: "#c62828" }}>
+        <div style={{ fontWeight: 600 }}>{label}</div>
+        <div>
+           총 {total.toLocaleString()}원 중{" "}
+          <b>{usedPercent}% 사용</b> (
+          {used.toLocaleString()}원 사용,{" "}
+          <span style={{ color: "#2e7d32" }}>
+            {remainingPercent}% ({(total - used).toLocaleString()}원) 남음
+          </span>
+              </div>
+    )
+      </div>
+    </div>
+  );
+}
+
 function SummaryCard(props: {
   label: string;
   value: number;
@@ -874,3 +1045,5 @@ function SummaryCard(props: {
     </div>
   );
 }
+
+
