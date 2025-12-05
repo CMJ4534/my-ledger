@@ -12,7 +12,8 @@ import {
   Legend,
   ResponsiveContainer,
 } from "recharts";
-import { TopNav } from "../components/TopNav";
+import type { PieLabelRenderProps } from "recharts";
+
 
 type Tx = {
   id: string;
@@ -750,9 +751,13 @@ return (
                     nameKey="name"
                     innerRadius={70}
                     outerRadius={110}
-                    label={({ name, percent = 0 }) =>
-                      `${name} ${(percent * 100).toFixed(1)}%`
-                    }
+                    label={(props: any) => {
+                    const name = String(props.name ?? "");
+                    const percent: number = Number(props.percent ?? 0);
+
+                    return `${name} ${(percent * 100).toFixed(1)}%`;
+                  }}
+                                    
                   >
                     {pieData.map((_, index) => (
                       <Cell

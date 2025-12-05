@@ -100,7 +100,12 @@ export default function StatsPage() {
               dataKey="value"
               nameKey="name"
               outerRadius={110}
-              label={({ name, percent = 0 }) => `${name}: ${(percent * 100).toFixed(1)}%`}
+              label={(props: any) => {
+              const name = String(props.name ?? "");
+              const percent: number = Number(props.percent ?? 0);
+
+              return `${name}: ${(percent * 100).toFixed(1)}%`;
+            }}
             >
               {categoryData.map((_, i) => (
                 <Cell key={i} /> // 색상 지정 생략(요청 시 추가 가능)

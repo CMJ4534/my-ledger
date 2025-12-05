@@ -10,7 +10,12 @@ export default function CategoryDonut({ data = [] as Row[] }: { data?: Row[] }) 
   return (
     <PieChart width={360} height={260}>
       <Pie data={data} dataKey="value" nameKey="name" innerRadius={60} outerRadius={100}
-           label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+           label={(props: any) => {
+            const name = String(props.name ?? "");
+            const percent: number = Number(props.percent ?? 0);
+
+            return `${name}: ${(percent * 100).toFixed(1)}%`;
+          }}
            labelLine={false}>
         {data.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
       </Pie>
